@@ -1,0 +1,13 @@
+parameters:
+    level: 8
+    paths:
+        - src
+        - tests
+    excludePaths:
+        # Symfony Flex boilerplate, not application code.
+        - tests/bootstrap.php
+    tmpDir: var/cache/phpstan
+
+# phpstan-symfony and phpstan-doctrine are installed but not wired in yet:
+# both need a warmed container/entity-manager to do their deeper checks, which
+# isn't meaningful until Phase 2 introduces real services and entities.

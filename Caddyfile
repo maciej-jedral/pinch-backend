@@ -1,0 +1,9 @@
+{
+	frankenphp
+}
+
+{$SERVER_NAME} {
+	root * public
+	encode gzip
+	php_server
+}
