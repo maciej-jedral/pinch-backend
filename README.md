@@ -12,4 +12,4 @@ This repo isn't meant to be run standalone — see the [`pinch`](https://github.
 
 ## Status
 
-Phase 1 scaffold: a single `GET /api/hello` endpoint proving the stack is wired end-to-end (Symfony → Postgres, and reachable from the Next.js frontend). No domain, auth, or real API design yet — that's Phase 2. See `ALIGNMENT.md` in the meta-repo for the full plan.
+Phase 1 scaffold: a single `GET /api/hello` endpoint proving the stack is wired end-to-end (Symfony → Postgres, and reachable from the Next.js frontend). No domain, auth, or real API design yet — that's Phase 2. See `../ai_artifacts/ALIGNMENT.md` in the meta-repo for the full plan.
