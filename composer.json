@@ -67,7 +67,10 @@
         "cs-check": "php-cs-fixer check --diff",
         "cs-fix": "php-cs-fixer fix",
         "stan": "phpstan analyse",
-        "test": "phpunit"
+        "test": [
+            "bin/console doctrine:database:create --env=test --if-not-exists",
+            "phpunit"
+        ]
     },
     "conflict": {
         "symfony/symfony": "*"

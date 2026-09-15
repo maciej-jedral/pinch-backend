@@ -1,4 +1,10 @@
 var/
 vendor/
 .git/
+.github/
 .idea/
+.phpunit.cache/
+.env.local
+.env.*.local
+.env.local.php
+compose.prod.yml

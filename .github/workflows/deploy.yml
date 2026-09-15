@@ -1,0 +1,152 @@
+# CI + deploy for pinch-backend. Decisions and rationale: pinch/ai_artifacts/ALIGNMENT.md
+# ("Backend deployment"); ops how-to (secrets, rollback, logs): pinch/ai_artifacts/WORKING_NOTES.md.
+#
+#   pull_request        -> check
+#   push to main        -> check -> build (arm64 image -> GHCR) -> deploy (SSH to the EC2 box)
+#   workflow_dispatch   -> same as push to main; re-run an older run to roll back to that sha
+name: CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+  IMAGE_TAG: sha-${{ github.sha }}
+
+jobs:
+  check:
+    name: Lint, analyse, test
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: pinch
+          POSTGRES_USER: pinch
+          POSTGRES_PASSWORD: pinch
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pinch"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Overrides the compose hostname in .env; `composer test` creates pinch_test itself.
+      DATABASE_URL: postgresql://pinch:pinch@127.0.0.1:5432/pinch?serverVersion=18&charset=utf8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: pdo_pgsql, intl, zip, opcache
+          coverage: none
+
+      - uses: ramsey/composer-install@v3
+
+      - run: composer cs-check
+      - run: composer stan
+      - run: composer test
+
+  build:
+    name: Build & push image
+    needs: check
+    if: github.event_name != 'pull_request'
+    # Native arm64 runner (free for public repos) — matches the t4g EC2 box, no QEMU.
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: prod
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to EC2
+    needs: build
+    runs-on: ubuntu-24.04
+    environment:
+      name: production
+      url: http://${{ vars.BACKEND_HOST }}:8000/api/hello
+    # Never let two deploys interleave; a queued newer one supersedes a waiting older one.
+    concurrency:
+      group: production
+      cancel-in-progress: false
+    env:
+      HOST: ${{ vars.BACKEND_HOST }}
+      SSH: ssh -o BatchMode=yes ubuntu@${{ vars.BACKEND_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: compose.prod.yml
+          sparse-checkout-cone-mode: false
+
+      - name: Configure SSH (deploy key + pinned host key)
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          printf '%s\n' "${{ vars.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Render runtime .env
+        run: |
+          umask 077
+          cat > runtime.env <<EOT
+          APP_ENV=prod
+          APP_SECRET=${{ secrets.APP_SECRET }}
+          DATABASE_URL=${{ secrets.DATABASE_URL }}
+          CORS_ALLOW_ORIGIN=^https://pinch-frontend-eight\.vercel\.app$
+          DEFAULT_URI=http://${HOST}:8000
+          BACKEND_IMAGE_TAG=${IMAGE_TAG}
+          EOT
+
+      - name: Copy compose file and .env to the box
+        run: |
+          $SSH 'mkdir -p /opt/pinch'
+          scp -o BatchMode=yes compose.prod.yml ubuntu@${HOST}:/opt/pinch/compose.yml
+          scp -o BatchMode=yes runtime.env ubuntu@${HOST}:/opt/pinch/.env
+
+      - name: Pull, migrate, restart
+        run: |
+          # The job token lets the first deploy pull before the GHCR package is flipped to
+          # public; logout afterwards so no token lingers on the VM.
+          $SSH "set -euo pipefail
+            cd /opt/pinch
+            echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+            docker compose pull --quiet
+            docker logout ghcr.io
+            docker compose run --rm --no-deps backend bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
+            docker compose up -d --remove-orphans --wait --wait-timeout 60
+            docker image prune -af > /dev/null
+            echo 'Live tag:' && grep BACKEND_IMAGE_TAG .env"
+
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 10); do
+            body=$(curl -fsS "http://${HOST}:8000/api/hello" || true)
+            echo "$body" | grep -q '"database":"connected"' && { echo "OK: $body"; exit 0; }
+            sleep 3
+          done
+          echo "Backend did not report a database connection: $body"; exit 1

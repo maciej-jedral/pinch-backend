@@ -1,0 +1,23 @@
+# Runtime definition for the EC2 box. Copied to /opt/pinch/compose.yml by the
+# deploy workflow (.github/workflows/deploy.yml) together with a generated .env
+# that holds APP_SECRET, DATABASE_URL, CORS_ALLOW_ORIGIN, DEFAULT_URI and
+# BACKEND_IMAGE_TAG. The database is Neon, so this is the only service.
+services:
+  backend:
+    image: ghcr.io/maciej-jedral/pinch-backend:${BACKEND_IMAGE_TAG:?set by the deploy workflow}
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/hello"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
