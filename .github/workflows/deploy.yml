@@ -89,13 +89,16 @@ jobs:
     runs-on: ubuntu-24.04
     environment:
       name: production
-      url: http://${{ vars.BACKEND_HOST }}:8000/api/hello
+      url: https://api.pinchapp.fyi/api/hello
     # Never let two deploys interleave; a queued newer one supersedes a waiting older one.
     concurrency:
       group: production
       cancel-in-progress: false
     env:
+      # BACKEND_HOST is the box's IP (SSH target; changes on instance replacement).
+      # The public hostname is fixed and public, so it lives here next to the CORS origin.
       HOST: ${{ vars.BACKEND_HOST }}
+      DOMAIN: api.pinchapp.fyi
       SSH: ssh -o BatchMode=yes ubuntu@${{ vars.BACKEND_HOST }}
     steps:
       - uses: actions/checkout@v4
@@ -117,8 +120,11 @@ jobs:
           APP_ENV=prod
           APP_SECRET=${{ secrets.APP_SECRET }}
           DATABASE_URL=${{ secrets.DATABASE_URL }}
-          CORS_ALLOW_ORIGIN=^https://pinch-frontend-eight\.vercel\.app$
-          DEFAULT_URI=http://${HOST}:8000
+          CORS_ALLOW_ORIGIN=^https://pinchapp\.fyi$
+          DEFAULT_URI=https://${DOMAIN}
+          # Caddy: public hostname (auto-TLS via Let's Encrypt) + an unpublished :8000
+          # listener for the image's HEALTHCHECK. See compose.prod.yml.
+          SERVER_NAME=${DOMAIN}, :8000
           BACKEND_IMAGE_TAG=${IMAGE_TAG}
           EOT
 
@@ -144,9 +150,10 @@ jobs:
 
       - name: Smoke test
         run: |
-          for i in $(seq 1 10); do
-            body=$(curl -fsS "http://${HOST}:8000/api/hello" || true)
+          # Generous: on a fresh box Caddy still has to obtain the certificate.
+          for i in $(seq 1 20); do
+            body=$(curl -fsS "https://${DOMAIN}/api/hello" || true)
             echo "$body" | grep -q '"database":"connected"' && { echo "OK: $body"; exit 0; }
-            sleep 3
+            sleep 5
           done
           echo "Backend did not report a database connection: $body"; exit 1
