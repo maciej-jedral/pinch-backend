@@ -1,5 +1,5 @@
-# CI + deploy for pinch-backend. Decisions and rationale: pinch/ai_artifacts/ALIGNMENT.md
-# ("Backend deployment"); ops how-to (secrets, rollback, logs): pinch/ai_artifacts/WORKING_NOTES.md.
+# CI + deploy for pinch-backend. Ops how-to (secrets, rollback, logs): README.md -> Operations;
+# decisions and rationale: AGENTS.md in the pinch meta-repo.
 #
 #   pull_request        -> check
 #   push to main        -> check -> build (arm64 image -> GHCR) -> deploy (SSH to the EC2 box)

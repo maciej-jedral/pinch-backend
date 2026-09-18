@@ -24,8 +24,22 @@ In production the container terminates TLS itself: `SERVER_NAME="api.pinchapp.fy
 - **Push to `main`** → `check` → `build` (arm64 `prod` image → `ghcr.io/maciej-jedral/pinch-backend:sha-<commit>` + `latest`) → `deploy` (SSH to the EC2 box: copy `compose.prod.yml` + a generated `.env`, `pull`, run migrations, `up -d`, smoke-test `https://api.pinchapp.fyi/api/hello`).
 - **Rollback**: Actions → pick the run of the commit you want → *Re-run all jobs*. The VM runs the pinned `sha-…` tag, never `latest`.
 
-Secrets/variables live in the repo's `production` environment. Rationale and ops notes: `ai_artifacts/ALIGNMENT.md` (*Backend deployment*) and `WORKING_NOTES.md` in the meta-repo.
+Only `main` may deploy to the `production` environment (deployment-branch policy). Rationale for all of this: the decision log in the meta-repo's `AGENTS.md`.
+
+## Operations
+
+- **Where things are**: on the VM, `/opt/pinch/compose.yml` + `/opt/pinch/.env` — both rewritten on every deploy, so edits there don't survive. Image: `ghcr.io/maciej-jedral/pinch-backend:sha-<full commit sha>`.
+- **What's live**: `curl https://api.pinchapp.fyi/api/hello`, or `ssh -i ~/.ssh/pinch-aws ubuntu@63.182.98.240 'grep BACKEND_IMAGE_TAG /opt/pinch/.env; docker compose -f /opt/pinch/compose.yml ps'`.
+- **Logs**: `ssh … 'docker compose -f /opt/pinch/compose.yml logs --tail 100 -f'`.
+- **Redeploy / rollback**: `gh run list --repo maciej-jedral/pinch-backend`, then `gh run rerun <id> --repo maciej-jedral/pinch-backend` (or Actions UI → *Re-run all jobs*). Re-running an older run deploys that commit's sha — no rebuild. Migrations are *not* rolled back: write expand/contract migrations.
+- **Secrets / variables** (GitHub `production` environment, `gh secret set <NAME> --env production`): secrets `APP_SECRET`, `DATABASE_URL` (Neon *direct* URI, `postgres://…/neondb?sslmode=require`), `DEPLOY_SSH_KEY` (private half of `~/.ssh/pinch-deploy`); variables `BACKEND_HOST` (the box's IP, SSH target), `KNOWN_HOSTS` (`ssh-keyscan -t ed25519 <ip>`). The public hostname, `CORS_ALLOW_ORIGIN`, `DEFAULT_URI` and `SERVER_NAME` are hardcoded in the workflow. GitHub never shows a secret again — keep `APP_SECRET` in a password manager.
+- **After a Terraform instance replacement** (new host key, empty disk): update `KNOWN_HOSTS`, re-run the latest workflow. Caddy re-issues the certificate on the first deploy.
+- **Rotate the deploy key**: `ssh-keygen -t ed25519 -f ~/.ssh/pinch-deploy` → public half into `terraform.tfvars` (`deploy_ssh_public_key`) → `./tf plan`/`apply` (replaces the instance) → `gh secret set DEPLOY_SSH_KEY --env production < ~/.ssh/pinch-deploy` → update `KNOWN_HOSTS` → re-run the workflow.
+- **Certificate**: `echo | openssl s_client -connect api.pinchapp.fyi:443 -servername api.pinchapp.fyi 2>/dev/null | openssl x509 -noout -dates`. Renewal is automatic (Caddy, ~30 days before expiry); certs live in the `caddy_data` volume on the VM.
+- **GHCR**: the deploy job logs in with the job token before `pull` and logs out after, so a private package works. Flip it public (GitHub → Packages → pinch-backend → settings) only if anonymous pulls are wanted.
+- **Migrations** run on every deploy (`--allow-no-migration` while `migrations/` is empty). The image carries a compiled `.env.local.php` (`composer dump-env prod`); real env vars still win.
+- **Test DB**: `composer test` = `doctrine:database:create --env=test --if-not-exists` + PHPUnit. The root compose passes no `APP_ENV` to the container (Symfony reads `/app/.env*` itself), which is what lets PHPUnit force `test`.
 
 ## Status
 
-Live at `https://api.pinchapp.fyi`. Phase 1 scaffold: a single `GET /api/hello` endpoint proving the stack is wired end-to-end (Symfony → Postgres, and reachable from the Next.js frontend). No auth or real API design yet — that's Phase 2. See `../ai_artifacts/ALIGNMENT.md` in the meta-repo for the full plan.
+Live at `https://api.pinchapp.fyi`. Phase 1 scaffold: a single `GET /api/hello` endpoint proving the stack is wired end-to-end (Symfony → Postgres, and reachable from the Next.js frontend). No auth or real API design yet — that's Phase 2; see `AGENTS.md` in the meta-repo.
