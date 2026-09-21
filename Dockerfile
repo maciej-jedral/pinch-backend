@@ -30,7 +30,7 @@ COPY composer.json composer.lock ./
 RUN composer install --no-scripts --no-autoloader --prefer-dist --no-interaction
 
 COPY . .
-RUN composer dump-autoload --optimize --classmap-authoritative
+RUN composer dump-autoload
 
 
 # Prod image: what the deploy workflow builds and pushes to GHCR.
@@ -51,6 +51,3 @@ RUN --mount=from=composer:2,source=/usr/bin/composer,target=/usr/bin/composer \
     composer dump-autoload --optimize --classmap-authoritative --no-dev \
     && composer dump-env prod \
     && composer run-script --no-dev post-install-cmd
-
-HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -fsS http://localhost:8000/api/hello > /dev/null || exit 1

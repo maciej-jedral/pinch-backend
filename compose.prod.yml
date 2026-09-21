@@ -3,10 +3,13 @@
 # that holds APP_SECRET, DATABASE_URL, CORS_ALLOW_ORIGIN, DEFAULT_URI, SERVER_NAME
 # and BACKEND_IMAGE_TAG. The database is Neon, so this is the only service.
 #
-# TLS terminates here: SERVER_NAME="api.pinchapp.fyi, :8000" makes Caddy serve the
+# TLS terminates here: SERVER_NAME="api.pinchapp.fyi" makes Caddy serve the
 # hostname on 80/443 with an automatic Let's Encrypt certificate (80 also answers
-# the ACME challenge and redirects to https), while :8000 stays a plain-HTTP
-# listener that is NOT published - only the image's HEALTHCHECK uses it.
+# the ACME challenge and redirects to https).
+#
+# No container healthcheck on purpose: the only thing it could probe is
+# /api/hello, whose SELECT 1 every 30s would keep the Neon free-tier compute
+# from ever scaling to zero. The deploy workflow's smoke test is the gate.
 services:
   backend:
     image: ghcr.io/maciej-jedral/pinch-backend:${BACKEND_IMAGE_TAG:?set by the deploy workflow}
@@ -21,7 +24,6 @@ services:
       # Lost on instance replacement -> Caddy simply re-issues.
       - caddy_data:/data
       - caddy_config:/config
-    # healthcheck comes from the image (see Dockerfile); `up --wait` relies on it.
     logging:
       driver: json-file
       options:
