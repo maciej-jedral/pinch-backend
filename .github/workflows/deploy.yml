@@ -122,9 +122,8 @@ jobs:
           DATABASE_URL=${{ secrets.DATABASE_URL }}
           CORS_ALLOW_ORIGIN=^https://pinchapp\.fyi$
           DEFAULT_URI=https://${DOMAIN}
-          # Caddy: public hostname (auto-TLS via Let's Encrypt) + an unpublished :8000
-          # listener for the image's HEALTHCHECK. See compose.prod.yml.
-          SERVER_NAME=${DOMAIN}, :8000
+          # Caddy: public hostname, auto-TLS via Let's Encrypt. See compose.prod.yml.
+          SERVER_NAME=${DOMAIN}
           BACKEND_IMAGE_TAG=${IMAGE_TAG}
           EOT
 
@@ -144,7 +143,7 @@ jobs:
             docker compose pull --quiet
             docker logout ghcr.io
             docker compose run --rm --no-deps backend bin/console doctrine:migrations:migrate --no-interaction --allow-no-migration
-            docker compose up -d --remove-orphans --wait --wait-timeout 60
+            docker compose up -d --remove-orphans
             docker image prune -af > /dev/null
             echo 'Live tag:' && grep BACKEND_IMAGE_TAG .env"
 
