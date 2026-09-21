@@ -30,7 +30,7 @@ COPY composer.json composer.lock ./
 RUN composer install --no-scripts --no-autoloader --prefer-dist --no-interaction
 
 COPY . .
-RUN composer dump-autoload --optimize --classmap-authoritative
+RUN composer dump-autoload
 
 
 # Prod image: what the deploy workflow builds and pushes to GHCR.
