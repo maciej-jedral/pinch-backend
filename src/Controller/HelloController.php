@@ -9,13 +9,14 @@ use Doctrine\DBAL\Exception as DBALException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
 
+#[Route('/api')]
 final class HelloController
 {
     public function __construct(
         private readonly Connection $connection,
     ) {}
 
-    #[Route('/api/hello', name: 'app_hello', methods: ['GET'])]
+    #[Route('/hello', name: 'app_hello', methods: ['GET'])]
     public function __invoke(): JsonResponse
     {
         try {
