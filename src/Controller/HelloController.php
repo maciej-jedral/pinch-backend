@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Exception as DBALException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\Routing\Attribute\Route;
 
@@ -17,7 +18,11 @@ final class HelloController
     #[Route('/api/hello', name: 'app_hello', methods: ['GET'])]
     public function __invoke(): JsonResponse
     {
-        $databaseConnected = 1 === (int) $this->connection->fetchOne('SELECT 1');
+        try {
+            $databaseConnected = 1 === (int) $this->connection->fetchOne('SELECT 1');
+        } catch (DBALException) {
+            $databaseConnected = false;
+        }
 
         return new JsonResponse([
             'message' => 'Hello from Symfony',
