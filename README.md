@@ -12,7 +12,7 @@ This repo isn't meant to be run standalone — see the [`pinch`](https://github.
 
 ## Docker image
 
-`Dockerfile` is multi-stage: `base` (FrankenPHP + extensions) → `dev` (Composer, dev deps; what the meta-repo's compose builds and bind-mounts source over) and `prod` (`--no-dev`, `APP_ENV=prod` baked, cache warmed, no Composer). `compose.prod.yml` is the runtime definition the deploy workflow ships to the VM.
+`Dockerfile` is multi-stage: `base` (FrankenPHP + extensions) → `dev` (Composer + dev php.ini; what the meta-repo's compose builds and bind-mounts the source, `vendor/` included, over) and `prod` (`--no-dev`, `APP_ENV=prod` baked, cache warmed, no Composer). `compose.prod.yml` is the runtime definition the deploy workflow ships to the VM.
 
 In production the container terminates TLS itself: `SERVER_NAME=api.pinchapp.fyi` makes the built-in Caddy serve the hostname on 80/443 with an automatic Let's Encrypt certificate (kept in the `caddy_data` volume). Locally the default `SERVER_NAME=:8000` applies. There is deliberately no container `HEALTHCHECK`: it could only probe `/api/hello`, and a `SELECT 1` every 30 s would keep the Neon free-tier compute awake around the clock (100 CU-hours/month); the deploy smoke test is the gate.
 

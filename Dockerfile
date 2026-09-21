@@ -18,19 +18,13 @@ EXPOSE 8000
 
 
 # Dev image: what the meta-repo's docker-compose.yml builds (`target: dev`).
-# Source is bind-mounted over /app at runtime, so this mainly provides Composer,
-# the dev php.ini and a warm vendor/ volume.
+# Source is bind-mounted over /app at runtime, vendor/ included (install.sh runs
+# `composer install` in the container), so this only adds Composer and the dev php.ini.
 FROM base AS dev
 
 RUN mv "$PHP_INI_DIR/php.ini-development" "$PHP_INI_DIR/php.ini"
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-
-COPY composer.json composer.lock ./
-RUN composer install --no-scripts --no-autoloader --prefer-dist --no-interaction
-
-COPY . .
-RUN composer dump-autoload
 
 
 # Prod image: what the deploy workflow builds and pushes to GHCR.
