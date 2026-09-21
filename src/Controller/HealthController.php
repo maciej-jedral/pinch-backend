@@ -9,8 +9,8 @@ use Symfony\Component\Routing\Attribute\Route;
 
 /**
  * Liveness probe: proves the app answers HTTP, nothing more. Deliberately
- * touches no database, so it is safe to poll at any interval (a periodic
- * query would keep the Neon free-tier compute from scaling to zero).
+ * touches no database or other backing service, so it stays cheap and is
+ * safe to poll at any interval.
  */
 #[Route('/api')]
 final class HealthController
